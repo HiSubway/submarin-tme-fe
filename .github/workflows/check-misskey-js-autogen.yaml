@@ -1,0 +1,175 @@
+name: Check misskey-js autogen
+
+on:
+  push:
+    branches:
+      - taiyme
+      - release
+    paths:
+      - .github/workflows/check-misskey-js-autogen.yaml
+      - .github/misskey/test.yml
+      - packages/backend/**/*
+
+  pull_request_target:
+    branches:
+      - taiyme
+      - release
+    paths:
+      - .github/misskey/test.yml
+      - packages/backend/**/*
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.number || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  pre-checkout:
+    name: Pre checkout
+    uses: ./.github/workflows/pre-checkout.yaml
+
+  generate-misskey-js:
+    name: Generate misskey-js
+    runs-on: ubuntu-22.04
+    needs:
+      - pre-checkout
+    env:
+      MISSKEY_CONFIG_YML: ci_config.yaml
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          ref: ${{ needs.pre-checkout.outputs.sha }}
+          fetch-depth: 1
+          submodules: true
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        run: |
+          pnpm install --frozen-lockfile
+
+      - name: Copy config
+        run: |
+          cp .github/misskey/test.yml ".config/${MISSKEY_CONFIG_YML}"
+
+      - name: Build
+        run: |
+          pnpm run build
+
+      - name: Generate API JSON
+        run: |
+          pnpm --filter=backend \
+            run generate-api-json
+
+      - name: Build misskey-js
+        run: |
+          cp packages/backend/built/api.json packages/misskey-js/generator/api.json
+          pnpm --filter=misskey-js-type-generator \
+            run generate
+
+      - name: Upload generated_misskey_js
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: generated_misskey_js
+          path: packages/misskey-js/generator/built/autogen
+
+  get-actual-misskey-js:
+    name: Get actual misskey-js
+    runs-on: ubuntu-22.04
+    needs:
+      - pre-checkout
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          ref: ${{ needs.pre-checkout.outputs.sha }}
+          fetch-depth: 1
+          submodules: true
+
+      - name: Upload actual_misskey_js
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: actual_misskey_js
+          path: packages/misskey-js/src/autogen
+
+  comment-misskey-js-autogen:
+    name: Comment misskey-js autogen
+    runs-on: ubuntu-22.04
+    needs:
+      - generate-misskey-js
+      - get-actual-misskey-js
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Download generated_misskey_js
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: generated_misskey_js
+          path: misskey-js-generated
+
+      - name: Download actual_misskey_js
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: actual_misskey_js
+          path: misskey-js-actual
+
+      - name: Check misskey-js changes
+        id: check-changes
+        run: |
+          diff -r -u --label=generated --label=on-tree ./misskey-js-generated ./misskey-js-actual > misskey-js.diff || true
+
+          if [ -s misskey-js.diff ]; then
+            echo 'changes=true' >> $GITHUB_OUTPUT
+          else
+            echo 'changes=false' >> $GITHUB_OUTPUT
+          fi
+
+      - name: Print full diff
+        run: |
+          cat ./misskey-js.diff
+
+      - name: Comment on PR (update)
+        if: github.event_name == 'pull_request_target' && steps.check-changes.outputs.changes == 'true'
+        continue-on-error: true
+        uses: marocchino/sticky-pull-request-comment@67d0dec7b07ed060a405f9b2a64b8ab319fdd7db # v2.9.2
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          header: check-misskey-js-autogen
+          recreate: true
+          message: |
+            ### ${{ github.workflow }}
+
+            Please regenerate misskey-js type definitions! :pray:\
+            misskey-js型定義の再生成をお願いします！ :pray:
+
+            ```sh
+            pnpm run build-misskey-js-with-types
+            ```
+
+      - name: Comment on PR (delete)
+        if: github.event_name == 'pull_request_target' && steps.check-changes.outputs.changes == 'false'
+        continue-on-error: true
+        uses: marocchino/sticky-pull-request-comment@67d0dec7b07ed060a405f9b2a64b8ab319fdd7db # v2.9.2
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          header: check-misskey-js-autogen
+          delete: true
+
+      - name: Make failure if changes are detected
+        if: steps.check-changes.outputs.changes == 'true'
+        run: |
+          exit 1

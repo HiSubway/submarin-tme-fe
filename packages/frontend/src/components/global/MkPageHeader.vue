@@ -1,0 +1,316 @@
+<!--
+SPDX-FileCopyrightText: syuilo and misskey-project
+SPDX-License-Identifier: AGPL-3.0-only
+-->
+
+<template>
+<div v-if="show" ref="el" :class="[$style.root]">
+	<div :class="[$style.upper, { [$style.slim]: narrow, [$style.thin]: thinRef }]">
+		<div v-if="!thinRef && narrow && props.displayMyAvatar && $i" class="_button" :class="$style.buttonsLeft" @click="openAccountMenu">
+			<MkAvatar :class="$style.avatar" :user="$i"/>
+		</div>
+		<div v-else-if="!thinRef && narrow && !hideTitleRef" :class="$style.buttonsLeft"/>
+
+		<template v-if="pageMetadata">
+			<div v-if="!hideTitleRef" :class="$style.titleContainer" @click="top">
+				<div v-if="pageMetadata.avatar" :class="$style.titleAvatarContainer">
+					<MkAvatar :class="$style.titleAvatar" :user="pageMetadata.avatar" indicator/>
+				</div>
+				<i v-else-if="pageMetadata.icon" :class="[$style.titleIcon, pageMetadata.icon]"></i>
+
+				<div :class="$style.title">
+					<MkUserName v-if="pageMetadata.userName" :user="pageMetadata.userName" :nowrap="true"/>
+					<div v-else-if="pageMetadata.title">{{ pageMetadata.title }}</div>
+					<div v-if="pageMetadata.subtitle" :class="$style.subtitle">
+						{{ pageMetadata.subtitle }}
+					</div>
+				</div>
+			</div>
+			<XTabs v-if="!narrow || hideTitleRef" :class="$style.tabs" :tab="tab" :tabs="tabs" :rootEl="el" @update:tab="key => emit('update:tab', key)" @tabClick="onTabClick"/>
+		</template>
+		<div v-if="(!thinRef && narrow && !hideTitleRef) || (actions && actions.length > 0)" :class="$style.buttonsRight">
+			<template v-for="action in actions">
+				<MkButton
+					v-if="action.asFullButton"
+					:key="`fullButton:${action.text}:${action.icon}`"
+					:class="$style.fullButton"
+					primary
+					:disabled="action.disabled"
+					@click.stop="action.handler"
+					@touchstart.stop="() => {}"
+				>
+					<i :class="action.icon" style="margin-right: 6px;"></i>
+					<span>{{ action.text }}</span>
+				</MkButton>
+				<button
+					v-else
+					:key="`button:${action.text}:${action.icon}`"
+					v-tooltip.noDelay="action.text"
+					:class="['_button', $style.button, { [$style.highlighted]: action.highlighted }]"
+					:disabled="action.disabled"
+					@click.stop="action.handler"
+					@touchstart.stop="() => {}"
+				>
+					<i :class="action.icon"></i>
+				</button>
+			</template>
+		</div>
+	</div>
+	<div v-if="(narrow && !hideTitleRef) && hasTabs" :class="[$style.lower, { [$style.slim]: narrow, [$style.thin]: thinRef }]">
+		<XTabs :class="$style.tabs" :tab="tab" :tabs="tabs" :rootEl="el" @update:tab="key => emit('update:tab', key)" @tabClick="onTabClick"/>
+	</div>
+</div>
+</template>
+
+<script lang="ts" setup>
+import { onMounted, onUnmounted, ref, inject, shallowRef, computed } from 'vue';
+import { scrollToTop } from '@@/js/scroll.js';
+import XTabs, { Tab } from './MkPageHeader.tabs.vue';
+import type { PageHeaderItem } from '@/types/page-header.js';
+import { injectReactiveMetadata, type PageMetadata } from '@/scripts/page-metadata.js';
+import { $i, openAccountMenu as openAccountMenu_ } from '@/account.js';
+import MkButton from '@/components/MkButton.vue';
+
+const props = withDefaults(defineProps<{
+	overridePageMetadata?: PageMetadata | null;
+	tabs?: Tab[];
+	tab?: string;
+	actions?: PageHeaderItem[] | null;
+	hideTitle?: boolean;
+	thin?: boolean;
+	displayMyAvatar?: boolean;
+}>(), {
+	overridePageMetadata: null,
+	tabs: () => [],
+	tab: undefined,
+	actions: null,
+});
+
+const emit = defineEmits<{
+	(ev: 'update:tab', key: string): void;
+}>();
+
+const injectedPageMetadata = injectReactiveMetadata();
+const pageMetadata = computed(() => props.overridePageMetadata ?? injectedPageMetadata.value);
+
+const injectedShouldOmitHeaderTitle = inject<boolean>('shouldOmitHeaderTitle', false);
+const injectedShouldHeaderThin = inject<boolean>('shouldHeaderThin', false);
+
+const hideTitleRef = computed(() => injectedShouldOmitHeaderTitle || props.hideTitle);
+const thinRef = computed(() => injectedShouldHeaderThin || props.thin);
+
+const el = shallowRef<HTMLElement | undefined>(undefined);
+const narrow = ref(false);
+const hasTabs = computed(() => props.tabs.length > 0);
+const hasActions = computed(() => props.actions && props.actions.length > 0);
+const show = computed(() => {
+	return !hideTitleRef.value || hasTabs.value || hasActions.value;
+});
+
+const top = () => {
+	if (el.value) {
+		scrollToTop(el.value as HTMLElement, { behavior: 'smooth' });
+	}
+};
+
+function openAccountMenu(ev: MouseEvent) {
+	openAccountMenu_({
+		withExtraOperation: true,
+	}, ev);
+}
+
+function onTabClick(): void {
+	top();
+}
+
+let ro: ResizeObserver | null;
+
+onMounted(() => {
+	if (el.value && el.value.parentElement) {
+		narrow.value = el.value.parentElement.offsetWidth < 500;
+		ro = new ResizeObserver(() => {
+			if (el.value && el.value.parentElement && document.body.contains(el.value as HTMLElement)) {
+				narrow.value = el.value.parentElement.offsetWidth < 500;
+			}
+		});
+		ro.observe(el.value.parentElement as HTMLElement);
+	}
+});
+
+onUnmounted(() => {
+	if (ro) ro.disconnect();
+});
+</script>
+
+<style lang="scss" module>
+.root {
+	backdrop-filter: var(--MI-blur, blur(15px));
+	border-bottom: solid 0.5px var(--MI_THEME-divider);
+	width: 100%;
+	background: rgb(from var(--MI_THEME-bg) r g b / 0.85);
+}
+
+.upper,
+.lower {
+	width: 100%;
+	background: transparent;
+}
+
+.upper {
+	--height: 50px;
+	display: flex;
+	gap: var(--MI-margin);
+	height: var(--height);
+
+	.tabs:first-child {
+		margin-left: auto;
+		padding: 0 12px;
+	}
+	.tabs {
+		margin-right: auto;
+	}
+
+	&.thin {
+		--height: 40px;
+
+		> .buttons {
+			> .button {
+				font-size: 0.9em;
+			}
+		}
+	}
+
+	&.slim {
+		text-align: center;
+		gap: 0;
+
+		.tabs:first-child {
+			margin-left: 0;
+		}
+		> .titleContainer {
+			margin: 0 auto;
+			max-width: 100%;
+		}
+	}
+}
+
+.lower {
+	--height: 40px;
+	height: var(--height);
+}
+
+.buttons {
+	--margin: 8px;
+	display: flex;
+	align-items: center;
+	min-width: var(--height);
+	height: var(--height);
+	&:empty {
+		width: var(--height);
+	}
+}
+
+.buttonsLeft {
+	composes: buttons;
+	margin: 0 var(--margin) 0 0;
+}
+
+.buttonsRight {
+	composes: buttons;
+	margin: 0 0 0 var(--margin);
+}
+
+.avatar {
+	$size: 32px;
+	display: inline-block;
+	width: $size;
+	height: $size;
+	vertical-align: bottom;
+	margin: 0 8px;
+}
+
+.button {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: var(--height);
+	width: calc(var(--height) - (var(--margin)));
+	box-sizing: border-box;
+	position: relative;
+	border-radius: 5px;
+
+	&:hover {
+		background: rgba(0, 0, 0, 0.05);
+	}
+
+	&.highlighted {
+		color: var(--MI_THEME-accent);
+	}
+}
+
+.fullButton {
+	& + .fullButton {
+		margin-left: 12px;
+	}
+}
+
+.titleContainer {
+	display: flex;
+	align-items: center;
+	max-width: min(30vw, 400px);
+	overflow: clip;
+	white-space: nowrap;
+	text-align: left;
+	font-weight: bold;
+	flex-shrink: 1;
+	margin-left: 24px;
+}
+
+.titleAvatarContainer {
+	$size: 32px;
+	contain: strict;
+	overflow: clip;
+	width: $size;
+	height: $size;
+	padding: 8px;
+	flex-shrink: 0;
+}
+
+.titleAvatar {
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+}
+
+.titleIcon {
+	margin-right: 8px;
+	width: 16px;
+	text-align: center;
+}
+
+.title {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	line-height: 1.1;
+}
+
+.subtitle {
+	opacity: 0.6;
+	font-size: 0.8em;
+	font-weight: normal;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+
+	&.activeTab {
+		text-align: center;
+
+		> .chevron {
+			display: inline-block;
+			margin-left: 6px;
+		}
+	}
+}
+</style>

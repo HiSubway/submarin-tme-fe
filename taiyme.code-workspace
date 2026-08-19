@@ -1,0 +1,77 @@
+{
+	"folders": [
+		{
+			"name": "root",
+			"path": ".",
+		},
+		{
+			"name": "backend",
+			"path": "./packages/backend",
+		},
+		{
+			"name": "frontend-shared",
+			"path": "./packages/frontend-shared",
+		},
+		{
+			"name": "frontend",
+			"path": "./packages/frontend",
+		},
+		{
+			"name": "frontend-embed",
+			"path": "./packages/frontend-embed",
+		},
+		{
+			"name": "sw",
+			"path": "./packages/sw",
+		},
+		{
+			"name": "misskey-js",
+			"path": "./packages/misskey-js",
+		},
+		{
+			"name": "misskey-js/generator",
+			"path": "./packages/misskey-js/generator",
+		},
+		{
+			"name": "misskey-reversi",
+			"path": "./packages/misskey-reversi",
+		},
+		{
+			"name": "misskey-bubble-game",
+			"path": "./packages/misskey-bubble-game",
+		},
+	],
+	"settings": {
+		"terminal.integrated.cwd": "${workspaceFolder:root}",
+		"search.exclude": {
+			"**/node_modules": true,
+		},
+		"jest.jestCommandLine": "pnpm run jest",
+		"jest.runMode": "on-demand",
+		"editor.formatOnSave": false,
+		"editor.codeActionsOnSave": {
+			"source.fixAll": "explicit",
+		},
+		"typescript.tsdk": "./node_modules/typescript/lib",
+		"yaml.schemas": {
+			"https://json.schemastore.org/github-action.json": [
+				".github/actions/**/action.yaml",
+				".github/actions/**/action.yml",
+			],
+			"https://json.schemastore.org/github-issue-config.json": [
+				".github/ISSUE_TEMPLATE/config.yml",
+			],
+		},
+	},
+	"extensions": {
+		"recommendations": [
+			"editorconfig.editorconfig",
+			"dbaeumer.vscode-eslint",
+			"Vue.volar",
+			"Orta.vscode-jest",
+			"mrmlnc.vscode-json5",
+			"github.vscode-github-actions",
+			"redhat.vscode-yaml",
+		],
+	},
+}

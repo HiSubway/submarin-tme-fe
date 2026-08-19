@@ -1,0 +1,29 @@
+{
+	"compilerOptions": {
+		"target": "ES2022",
+		"module": "nodenext",
+		"moduleResolution": "nodenext",
+		"declaration": true,
+		"declarationMap": true,
+		"sourceMap": false,
+		"outDir": "./built/",
+		"removeComments": true,
+		"strict": true,
+		"strictFunctionTypes": true,
+		"strictNullChecks": true,
+		"experimentalDecorators": true,
+		"noImplicitReturns": true,
+		"esModuleInterop": true,
+		"typeRoots": [
+			"./node_modules/@types",
+		],
+		"lib": [
+			"ESNext",
+			"DOM",
+		],
+	},
+	"include": [
+		"./src/**/*",
+	],
+	"exclude": [],
+}

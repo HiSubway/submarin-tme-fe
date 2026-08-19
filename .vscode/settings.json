@@ -1,0 +1,21 @@
+{
+	"search.exclude": {
+		"**/node_modules": true,
+	},
+	"jest.jestCommandLine": "pnpm run jest",
+	"jest.runMode": "on-demand",
+	"editor.formatOnSave": false,
+	"editor.codeActionsOnSave": {
+		"source.fixAll": "explicit",
+	},
+	"typescript.tsdk": "./node_modules/typescript/lib",
+	"yaml.schemas": {
+		"https://json.schemastore.org/github-action.json": [
+			".github/actions/**/action.yaml",
+			".github/actions/**/action.yml",
+		],
+		"https://json.schemastore.org/github-issue-config.json": [
+			".github/ISSUE_TEMPLATE/config.yml",
+		],
+	},
+}

@@ -1,0 +1,185 @@
+name: Test (frontend)
+
+on:
+  push:
+    branches:
+      - taiyme
+      - release
+    paths:
+      - .github/workflows/test-frontend.yaml
+      - .github/misskey/test.yml
+      - packages/frontend/**/*
+      - packages/frontend-embed/**/*
+      - packages/frontend-shared/**/*
+      - packages/backend/**/*
+      - packages/misskey-js/**/*
+
+  pull_request_target:
+    branches:
+      - taiyme
+      - release
+    paths:
+      - .github/misskey/test.yml
+      - packages/frontend/**/*
+      - packages/frontend-embed/**/*
+      - packages/frontend-shared/**/*
+      - packages/backend/**/*
+      - packages/misskey-js/**/*
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.number || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  pre-checkout:
+    name: Pre checkout
+    uses: ./.github/workflows/pre-checkout.yaml
+
+  unit-testing:
+    name: Unit testing
+    runs-on: ubuntu-22.04
+    needs:
+      - pre-checkout
+    strategy:
+      fail-fast: false
+    env:
+      MISSKEY_CONFIG_YML: ci_config.yaml
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          ref: ${{ needs.pre-checkout.outputs.sha }}
+          fetch-depth: 1
+          submodules: true
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        run: |
+          pnpm install --frozen-lockfile
+
+      - name: Copy config
+        run: |
+          cp .github/misskey/test.yml ".config/${MISSKEY_CONFIG_YML}"
+
+      - name: Build
+        run: |
+          pnpm run build
+
+      - name: Test
+        run: |
+          pnpm --filter=frontend \
+            run test
+
+      # TODO: カバレッジレポートはまた今度
+
+  e2e-testing:
+    name: E2E testing
+    runs-on: ubuntu-22.04
+    needs:
+      - pre-checkout
+    strategy:
+      fail-fast: false
+      matrix:
+        browser:
+          - chrome
+    services:
+      postgres:
+        image: postgres:15
+        ports:
+          - 54312:5432
+        env:
+          POSTGRES_DB: test-misskey
+          POSTGRES_HOST_AUTH_METHOD: trust
+      redis:
+        image: redis:7
+        ports:
+          - 56312:6379
+    env:
+      MISSKEY_CONFIG_YML: ci_config.yaml
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          ref: ${{ needs.pre-checkout.outputs.sha }}
+          fetch-depth: 1
+          submodules: true
+
+      # https://github.com/cypress-io/cypress-docker-images/issues/150
+      # - name: Install mplayer for FireFox
+      #   if: ${{ matrix.browser == 'firefox' }}
+      #   run: |
+      #     sudo apt install mplayer -y
+
+      # - uses: browser-actions/setup-firefox@955a5d42b5f068a8917c6a4ff1656a2235c66dfb # v1.5.2
+      #   if: ${{ matrix.browser == 'firefox' }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        run: |
+          pnpm install --frozen-lockfile
+
+      - name: Copy config
+        run: |
+          cp .github/misskey/test.yml ".config/${MISSKEY_CONFIG_YML}"
+
+      - name: Build
+        run: |
+          pnpm run build
+
+      # https://github.com/cypress-io/cypress/issues/4351#issuecomment-559489091
+      - name: ALSA Env
+        run: |
+          echo -e 'pcm.!default {\n type hw\n card 0\n}\n\nctl.!default {\n type hw\n card 0\n}' > ~/.asoundrc
+
+      # XXX: This tries reinstalling Cypress if the binary is not cached
+      # Remove this when the cache issue is fixed
+      - name: Cypress install
+        run: |
+          pnpm exec cypress install
+
+      - name: Cypress run
+        uses: cypress-io/github-action@615dcf65299b63c35268d795f4dfb79532388f64 # v6.10.0
+        timeout-minutes: 15
+        with:
+          install: false
+          start: pnpm run start:test
+          wait-on: 'http://localhost:61812'
+          headed: true
+          browser: ${{ matrix.browser }}
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: failure()
+        with:
+          name: ${{ matrix.browser }}-cypress-screenshots
+          path: cypress/screenshots
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: ${{ matrix.browser }}-cypress-videos
+          path: cypress/videos

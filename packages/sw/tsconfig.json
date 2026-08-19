@@ -1,0 +1,41 @@
+{
+	"compilerOptions": {
+		"allowJs": true,
+		"noEmitOnError": false,
+		"noImplicitAny": false,
+		"noImplicitReturns": true,
+		"noUnusedParameters": false,
+		"noUnusedLocals": true,
+		"noFallthroughCasesInSwitch": true,
+		"declaration": false,
+		"sourceMap": false,
+		"target": "ES2022",
+		"module": "nodenext",
+		"moduleResolution": "nodenext",
+		"removeComments": false,
+		"noLib": false,
+		"strict": true,
+		"strictNullChecks": true,
+		"experimentalDecorators": true,
+		"resolveJsonModule": true,
+		"isolatedModules": true,
+		"baseUrl": "./",
+		"paths": {
+			"@/*": ["./src/*"],
+			"@@/*": ["../frontend-shared/*"],
+		},
+		"typeRoots": [
+			"./node_modules/@types",
+			"./src/@types",
+		],
+		"lib": [
+			"ESNext",
+			"WebWorker",
+		],
+	},
+	"compileOnSave": false,
+	"include": [
+		"./src/**/*.ts",
+	],
+	"exclude": [],
+}

@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta name="format-detection" content="telephone=no, date=no, address=no, email=no, url=no">
+	<meta name="application-name" content="Misskey">
+	<meta name="referrer" content="origin">
+	<meta name="theme-color" content="#86b300">
+	<meta name="theme-color-orig" content="#86b300">
+	<meta name="misskey-standalone" content="true">
+	<meta property="og:site_name" content="Misskey">
+	<meta property="instance_url" content="https://submarin.online">
+	<link rel="icon" href="/favicon.ico">
+	<link rel="manifest" href="/manifest.json">
+	<title>Submarin v24</title>
+	<meta name="description" content="Submarin v24">
+	<meta property="og:title" content="Submarin">
+	<meta property="og:description" content="Submarin taiyme v24 front">
+	<style>
+		html {
+			background-color: var(--MI_THEME-bg);
+			color: var(--MI_THEME-fg);
+		}
+		#splash {
+			position: fixed;
+			z-index: 10000;
+			top: 0;
+			left: 0;
+			width: 100vw;
+			height: 100vh;
+			cursor: wait;
+			background-color: var(--MI_THEME-bg);
+			opacity: 1;
+			transition: opacity 0.5s ease;
+		}
+		#splashIcon {
+			position: absolute;
+			top: 0;
+			right: 0;
+			bottom: 0;
+			left: 0;
+			margin: auto;
+			width: 64px;
+			height: 64px;
+			pointer-events: none;
+		}
+		#splashSpinner {
+			position: absolute;
+			top: 0;
+			right: 0;
+			bottom: 0;
+			left: 0;
+			margin: auto;
+			display: inline-block;
+			width: 28px;
+			height: 28px;
+			transform: translateY(70px);
+			color: var(--MI_THEME-accent);
+		}
+		#splashSpinner > .spinner {
+			position: absolute;
+			top: 0;
+			left: 0;
+			width: 28px;
+			height: 28px;
+			fill-rule: evenodd;
+			clip-rule: evenodd;
+			stroke-linecap: round;
+			stroke-linejoin: round;
+			stroke-miterlimit: 1.5;
+		}
+		#splashSpinner > .spinner.bg {
+			opacity: 0.275;
+		}
+		#splashSpinner > .spinner.fg {
+			animation: splashSpinner 0.5s linear infinite;
+		}
+		@keyframes splashSpinner {
+			0% { transform: rotate(0deg); }
+			100% { transform: rotate(360deg); }
+		}
+	</style>
+
+	<!-- VERSION and CLIENT_ENTRY will be injected by build script -->
+	<script>
+		var VERSION = "__VERSION__";
+		var CLIENT_ENTRY = "__CLIENT_ENTRY__";
+	</script>
+
+	<!-- misskey_meta: populated at runtime from API -->
+	<script type="application/json" id="misskey_meta"></script>
+
+	<!-- misskey_clientCtx: not used in standalone mode -->
+	<script type="application/json" id="misskey_clientCtx"></script>
+
+	<script>
+		/* Standalone boot script */
+		'use strict';
+
+		(async () => {
+			window.onerror = (e) => {
+				console.error(e);
+				renderError('SOMETHING_HAPPENED', e);
+			};
+			window.onunhandledrejection = (e) => {
+				console.error(e);
+				renderError('SOMETHING_HAPPENED_IN_PROMISE', e);
+			};
+
+			let forceError = localStorage.getItem('forceError');
+			if (forceError != null) {
+				renderError('FORCED_ERROR', 'This error is forced by having forceError in local storage.');
+				return;
+			}
+
+			// Resolve the API base URL from the meta tag
+			var instanceMeta = document.querySelector('meta[property="instance_url"]');
+			var savedStandaloneHost = localStorage.getItem('standaloneHost');
+			var API_BASE = savedStandaloneHost && savedStandaloneHost !== ''
+				? 'https://' + savedStandaloneHost.replace(/^https?:\/\//, '').replace(/\/+$/, '')
+				: instanceMeta ? instanceMeta.content : 'https://submarin.online';
+			var misskeyMetaEl = document.getElementById('misskey_meta');
+			if (instanceMeta) {
+				instanceMeta.content = API_BASE;
+			}
+
+			var metaRes;
+			try {
+				metaRes = await window.fetch(API_BASE + '/api/meta', {
+					method: 'POST',
+					body: JSON.stringify({ detail: true }),
+					credentials: 'omit',
+					cache: 'no-cache',
+					headers: {
+						'Content-Type': 'application/json',
+					},
+				});
+			} catch (err) {
+				renderError('META_FETCH_NETWORK', err);
+				return;
+			}
+			if (metaRes.status !== 200) {
+				renderError('META_FETCH');
+				return;
+			}
+			var meta = await metaRes.json();
+			if (misskeyMetaEl) {
+				misskeyMetaEl.textContent = JSON.stringify(meta);
+				misskeyMetaEl.dataset.generatedAt = String(Date.now());
+			}
+
+			//#region Detect language & fetch translations
+			var localeVersion = localStorage.getItem('localeVersion');
+			var storedLocale = localStorage.getItem('locale');
+			if (storedLocale) {
+				try {
+					JSON.parse(storedLocale);
+				} catch (err) {
+					console.error('Invalid cached locale detected. Clearing cache.', err);
+					localStorage.removeItem('locale');
+					localStorage.removeItem('localeVersion');
+					storedLocale = null;
+					localeVersion = null;
+				}
+			}
+
+			if (!storedLocale || localeVersion !== VERSION) {
+				var supportedLangs = __LANGS__;
+				var lang = localStorage.getItem('lang');
+				if (lang == null || !supportedLangs.includes(lang)) {
+					if (supportedLangs.includes(navigator.language)) {
+						lang = navigator.language;
+					} else {
+						lang = supportedLangs.find(function(x) { return x.split('-')[0] === navigator.language; });
+						if (lang == null) lang = 'en-US';
+					}
+				}
+
+				if (lang == null || lang.toString == null || lang.toString() === 'null') {
+					console.error('invalid lang value detected!!!', typeof lang, lang);
+					lang = 'en-US';
+				}
+
+				var localRes;
+				try {
+					localRes = await window.fetch('/assets/locales/' + lang + '.' + VERSION + '.json', {
+						cache: 'no-cache',
+					});
+				} catch (err) {
+					renderError('LOCALE_FETCH_NETWORK', err);
+					return;
+				}
+				if (localRes.status === 200) {
+					var localeText = await localRes.text();
+					try {
+						JSON.parse(localeText);
+					} catch (err) {
+						renderError('LOCALE_INVALID_JSON', err);
+						return;
+					}
+					localStorage.setItem('lang', lang);
+					localStorage.setItem('locale', localeText);
+					localStorage.setItem('localeVersion', VERSION);
+				} else {
+					renderError('LOCALE_FETCH');
+					return;
+				}
+			}
+			//#endregion
+
+			//#region Script
+			async function importAppScript() {
+				await import('/' + CLIENT_ENTRY)
+					.catch(async function(e) {
+						console.error(e);
+						renderError('APP_IMPORT', e);
+					});
+			}
+
+			if (document.readyState !== 'loading') {
+				importAppScript();
+			} else {
+				window.addEventListener('DOMContentLoaded', function() {
+					importAppScript();
+				});
+			}
+			//#endregion
+
+			//#region Theme
+			var theme = localStorage.getItem('theme');
+			if (theme) {
+				for (var _a = 0, _b = Object.entries(JSON.parse(theme)); _a < _b.length; _a++) {
+					var _c = _b[_a], k = _c[0], v2 = _c[1];
+					document.documentElement.style.setProperty('--MI_THEME-' + k, v2.toString());
+
+					if (k === 'htmlThemeColor') {
+						for (var _d = 0; _d < document.head.children.length; _d++) {
+							var tag = document.head.children[_d];
+							if (tag.tagName === 'META' && tag.getAttribute('name') === 'theme-color') {
+								tag.setAttribute('content', v2);
+								break;
+							}
+						}
+					}
+				}
+			}
+			var colorScheme = localStorage.getItem('colorScheme');
+			if (colorScheme) {
+				document.documentElement.style.setProperty('color-scheme', colorScheme);
+			}
+			//#endregion
+
+			var fontSize = localStorage.getItem('fontSize');
+			if (fontSize) {
+				document.documentElement.classList.add('f-' + fontSize);
+			}
+
+			var useSystemFont = localStorage.getItem('useSystemFont');
+			if (useSystemFont) {
+				document.documentElement.classList.add('useSystemFont');
+			}
+
+			var wallpaper = localStorage.getItem('wallpaper');
+			if (wallpaper) {
+				document.documentElement.style.backgroundImage = 'url(' + wallpaper + ')';
+			}
+
+			async function renderError(code, details) {
+				if (document.readyState === 'loading') {
+					await new Promise(function(resolve) { window.addEventListener('DOMContentLoaded', resolve); });
+				}
+
+				var errorsElement = document.getElementById('errors');
+
+				if (!errorsElement) {
+					document.body.innerHTML = '\
+					<svg class="icon-warning" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">\
+						<path stroke="none" d="M0 0h24v24H0z" fill="none"></path>\
+						<path d="M12 9v2m0 4v.01"></path>\
+						<path d="M5 19h14a2 2 0 0 0 1.84 -2.75l-7.1 -12.25a2 2 0 0 0 -3.5 0l-7.1 12.25a2 2 0 0 0 1.75 2.75"></path>\
+					</svg>\
+					<h1>Failed to load<br>\u8AAD\u307F\u8FBC\u307F\u306B\u5931\u6557\u3057\u307E\u3057\u305F</h1>\
+					<button class="button-big" onclick="location.reload(true);">\
+						<span class="button-label-big">Reload / \u30EA\u30ED\u30FC\u30C9</span>\
+					</button>\
+					<p><b>The following actions may solve the problem. / \u4EE5\u4E0B\u3092\u884C\u3046\u3068\u89E3\u6C7A\u3059\u308B\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059\u3002</b></p>\
+					<p>Update your os and browser / \u30D6\u30E9\u30A6\u30B6\u304A\u3088\u3073OS\u3092\u6700\u65B0\u30D0\u30FC\u30B8\u30E7\u30F3\u306B\u66F4\u65B0\u3059\u308B</p>\
+					<p>Disable an adblocker / \u30A2\u30C9\u30D6\u30ED\u30C3\u30AB\u30FC\u3092\u7121\u52B9\u306B\u3059\u308B</p>\
+					<p>Clear the browser cache / \u30D6\u30E9\u30A6\u30B6\u306E\u30AD\u30E3\u30C3\u30B7\u30E5\u3092\u30AF\u30EA\u30A2\u3059\u308B</p>\
+					<br>\
+					<div id="errors"></div>\
+					';
+					errorsElement = document.getElementById('errors');
+				}
+				var detailsElement = document.createElement('details');
+				detailsElement.id = 'errorInfo';
+				detailsElement.innerHTML = '\
+				<br>\
+				<summary>\
+					<code>ERROR CODE: ' + code + '</code>\
+				</summary>\
+				<code>' + (details ? details.toString() + ' ' + JSON.stringify(details) : '') + '</code>';
+				errorsElement.appendChild(detailsElement);
+			}
+		})();
+	</script>
+</head>
+<body>
+	<noscript>
+		<p>JavaScriptを有効にしてください<br>Please turn on your JavaScript</p>
+	</noscript>
+	<div id="splash">
+		<img id="splashIcon" src="/static-assets/splash.png">
+		<div id="splashSpinner">
+			<svg class="spinner bg" viewBox="0 0 152 152" xmlns="http://www.w3.org/2000/svg">
+				<g transform="matrix(1,0,0,1,12,12)">
+					<circle cx="64" cy="64" r="64" style="fill:none;stroke:currentColor;stroke-width:24px;"/>
+				</g>
+			</svg>
+			<svg class="spinner fg" viewBox="0 0 152 152" xmlns="http://www.w3.org/2000/svg">
+				<g transform="matrix(1,0,0,1,12,12)">
+					<path d="M128,64C128,28.654 99.346,0 64,0C99.346,0 128,28.654 128,64Z" style="fill:none;stroke:currentColor;stroke-width:24px;"/>
+				</g>
+			</svg>
+		</div>
+	</div>
+</body>
+</html>

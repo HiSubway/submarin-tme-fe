@@ -1,0 +1,19 @@
+{
+	"compilerOptions": {
+		"target": "ESNext",
+		"module": "ESNext",
+		"moduleResolution": "nodenext",
+		"strict": true,
+		"strictFunctionTypes": true,
+		"strictNullChecks": true,
+		"esModuleInterop": true,
+		"lib": [
+			"ESNext",
+		],
+	},
+	"include": [
+		"./src/**/*.ts",
+		"./built/**/*.ts",
+	],
+	"exclude": [],
+}

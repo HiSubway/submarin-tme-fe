@@ -1,0 +1,122 @@
+name: Check SPDX-License-Identifier
+
+on:
+  push:
+    branches:
+      - taiyme
+      - release
+    paths:
+      - .github/workflows/check-spdx-license-id.yaml
+      - cypress/e2e/**/*
+      - packages/**/*
+      - scripts/**/*
+
+  pull_request_target:
+    branches:
+      - taiyme
+      - release
+    paths:
+      - cypress/e2e/**/*
+      - packages/**/*
+      - scripts/**/*
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.number || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  pre-checkout:
+    name: Pre checkout
+    uses: ./.github/workflows/pre-checkout.yaml
+
+  check-spdx-license-id:
+    name: Check SPDX-License-Identifier
+    runs-on: ubuntu-22.04
+    needs:
+      - pre-checkout
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          ref: ${{ needs.pre-checkout.outputs.sha }}
+          fetch-depth: 1
+
+      - name: Check SPDX-License-Identifier
+        run: |
+          counter=0
+
+          search() {
+            local directory="$1"
+            if [[ ! -d "$directory" ]]; then
+              return 0
+            fi
+            find "$directory" -type f \
+              \( \
+                -name '*.html' -or \
+                -name '*.scss' -or \
+                -name '*.css' -or \
+                -name '*.vue' \
+              \) -or \
+              \( \
+                \( \
+                  -name '*.ts' -or \
+                  -name '*.js' -or \
+                  -name '*.mjs' -or \
+                  -name '*.cjs' \
+                \) -and \( \
+                  -not -name '*.config.*' \
+                \) \
+              \)
+          }
+
+          check() {
+            local file="$1"
+            if ! (
+              grep -q 'SPDX-FileCopyrightText: ' "$file" &&
+              grep -q 'SPDX-License-Identifier: ' "$file"
+            ); then
+              echo "::error file=${file},line=0::Missing SPDX-License-Identifier"
+              ((counter++))
+            fi
+          }
+
+          directories=(
+            'cypress/e2e'
+            'packages/backend/migration'
+            'packages/backend/src'
+            'packages/backend/test'
+            'packages/backend/test-federation'
+            'packages/backend/test-server'
+            'packages/frontend/.storybook'
+            'packages/frontend/@types'
+            'packages/frontend/lib'
+            'packages/frontend/public'
+            'packages/frontend/src'
+            'packages/frontend/test'
+            'packages/frontend-embed/@types'
+            'packages/frontend-embed/src'
+            'packages/frontend-shared/@types'
+            'packages/frontend-shared/js'
+            'packages/misskey-bubble-game/src'
+            'packages/misskey-reversi/src'
+            'packages/sw/src'
+            'scripts'
+          )
+
+          for directory in "${directories[@]}"; do
+            for file in $(search "$directory"); do
+              check "$file"
+            done
+          done
+
+          if [ "$counter" -gt 0 ]; then
+            echo "::error::SPDX-License-Identifier is missing in ${counter} file(s)."
+            exit 1
+          else
+            echo '::notice::SPDX-License-Identifier is certainly described in all target file(s)!'
+            exit 0
+          fi
