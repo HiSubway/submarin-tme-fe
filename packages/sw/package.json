@@ -1,0 +1,19 @@
+{
+	"name": "sw",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"watch": "node build.js watch",
+		"build": "node build.js",
+		"lint": "eslint --quiet src/**/*.ts"
+	},
+	"resolutions": {},
+	"dependencies": {
+		"esbuild": "^0.17.11",
+		"idb-keyval": "^6.2.0",
+		"misskey-js": "0.0.15"
+	},
+	"devDependencies": {
+		"eslint": "^8.35.0"
+	}
+}

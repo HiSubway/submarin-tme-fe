@@ -1,0 +1,36 @@
+version: "3"
+services:
+  web:
+    image: ghcr.io/taiyme/misskey:12.119.2-taiyme-v1.2.0
+    restart: always
+    ports:
+      - 3000:3000
+    networks:
+      - internal_network
+      - external_network
+    volumes:
+      - ./files:/misskey/files
+      - ./.config:/misskey/.config:ro
+    depends_on:
+      - db
+      - redis
+  redis:
+    restart: always
+    image: redis:4.0-alpine
+    networks:
+      - internal_network
+    volumes:
+      - ./redis:/data
+  db:
+    restart: always
+    image: postgres:12.2-alpine
+    networks:
+      - internal_network
+    env_file:
+      - .config/docker.env
+    volumes:
+      - ./db:/var/lib/postgresql/data
+networks:
+  internal_network:
+    internal: true
+  external_network:

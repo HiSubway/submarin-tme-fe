@@ -1,0 +1,13 @@
+.github
+.vscode
+.config
+db/
+redis/
+files/
+misskey-assets/
+**/built
+**/node_modules
+
+Dockerfile
+Dockerfile.*
+docker-compose.*
